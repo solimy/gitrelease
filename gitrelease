@@ -1,0 +1,57 @@
+#!/usr/bin/env python
+
+
+import logging as logger
+import subprocess
+import traceback
+import argparse
+import os
+
+
+logger.basicConfig(
+    format='%(asctime)s %(process)-5d %(levelname)-8s %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    level=os.getenv("LOGLEVEL","INFO")
+)
+
+
+def main(release, commit, remote):
+    subprocess.check_output(f'git pull {remote} --tags'.split(' '))
+    tag = subprocess.check_output(f'git describe --tags --always --abbrev=0'.split(' ')).decode('utf-8')[:-1]
+    if len(tag.split('.')) != 3:
+        tag = '0.0.0'
+    logger.info(f'Previous release : {tag}')
+    major, minor, patch = map(int, tag.split('.'))
+    if release == 'major':
+        major += 1
+        minor = 0
+        patch = 0
+    elif release == 'minor':
+        minor += 1
+        patch = 0
+    elif release == 'patch':
+        patch += 1
+    else:
+        raise ValueError(f'Unexpected release {release}')
+    tag = f'{major}.{minor}.{patch}'
+    subprocess.check_output(f'git tag {tag}'.split(' '))
+    subprocess.check_output(f'git push --tags'.split(' '))
+    logger.info(f'Released new release : {tag}')
+
+
+if __name__ == "__main__":
+    try:
+        parser = argparse.ArgumentParser(description='')
+        release_choice_parser = parser.add_mutually_exclusive_group(required=True)
+        release_choice_parser.add_argument('-M', '--major', dest='release', action='store_const', const='major')
+        release_choice_parser.add_argument('-m', '--minor', dest='release', action='store_const', const='minor')
+        release_choice_parser.add_argument('-p', '--patch', dest='release', action='store_const', const='patch')
+        parser.add_argument('--commit', type=str, required=False, default='')
+        parser.add_argument('--remote', type=str, required=False, default='origin')
+        release = parser.parse_args().release
+        commit = parser.parse_args().commit
+        remote = parser.parse_args().remote
+        main(release, commit, remote)
+    except Exception as e:
+        logger.critical(traceback.format_exc())
+        raise e
